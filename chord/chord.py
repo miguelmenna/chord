@@ -1,10 +1,12 @@
+import hashlib
+
 class Interface:
     def __init__(self):
         self.chord = Chord()
 
     def mount_ring(self, num_nodes):
         for i in range(num_nodes):
-            node = Node(i, "127.0.0.1", 8000 + i, [], None, None)  
+            node = Node(i, "127.0.0.1", 8000 + i, [])
             self.chord.join(node)
 
     def insert_resource(self, resource):
@@ -14,12 +16,11 @@ class Interface:
         return self.chord.search_resource(resource)
 
     def leave_node(self, node_id):
-        node = self.chord.ring[node_id]
-        self.chord.leave(node)
+        self.chord.leave(node_id)
 
     def join_node(self, node_id):
-        node = self.chord.ring[node_id]
-        self.chord.join(node)
+        self.chord.join(node_id)
+
 
 class Node:
     def __init__(self, id, ip, port, resources, successor=None, predecessor=None):
@@ -37,13 +38,14 @@ class Chord:
         self.hash_table = {}
 
     def join(self, node):
-        node.id = hash(node.ip + ":" + str(node.port))
+        node.id = self.get_hash_id(node.ip, node.port)
         self.ring.insert(self.get_position(node.id), node)
-        self.update_predecessors_and_successors(node)
+        self.update_predecessors_and_successors()
 
-    def leave(self, node):
+    def leave(self, node_id):
+        node = self.ring[node_id]
         self.ring.remove(node)
-        self.update_predecessors_and_successors(node.predecessor, node.successor)
+        self.update_predecessors_and_successors()
 
     def insert_resource(self, resource):
         node = self.get_responsible_node(resource)
@@ -57,7 +59,7 @@ class Chord:
         return None
 
     def get_responsible_node(self, resource):
-        resource_id = hash(resource)
+        resource_id = self.get_hash_id(resource)
         for node in self.ring:
             if node.id >= resource_id:
                 return node
@@ -69,16 +71,24 @@ class Chord:
                 return i
         return len(self.ring)
 
-    def update_predecessors_and_successors(self, node1, node2):
-        if node1 is not None:
-            node1.successor = node2
-        if node2 is not None:
-            node2.predecessor = node1
+    def update_predecessors_and_successors(self):
+        ring_size = len(self.ring)
+        for i, node in enumerate(self.ring):
+            node.successor = self.ring[(i + 1) % ring_size]
+            node.predecessor = self.ring[i - 1]
 
-# Criar interface
+    def get_hash_id(self, ip, port=None):
+        if port is None:
+            data = ip
+        else:
+            data = ip + ":" + str(port)
+        return int(hashlib.sha256(data.encode()).hexdigest(), 16) % 10**8
+
+
+
 interface = Interface()
 
-# Menu principal
+
 while True:
     print("----- Menu CHORD -----")
     print("1. Gerenciar Anel")
@@ -88,7 +98,6 @@ while True:
     option = int(input("Digite a opção desejada: "))
 
     if option == 1:
-        # Submenu Gerenciar Anel
         while True:
             print("----- Submenu Gerenciar Anel -----")
             print("1. Montar Anel")
@@ -104,8 +113,8 @@ while True:
                 interface.mount_ring(num_nodes)
             elif option == 2:
                 print("Nós:")
-                for node in interface.chord.ring:
-                    print("ID:", node.id, "IP:", node.ip, "Porta:", node.port)
+                for i, node in enumerate(interface.chord.ring):
+                    print("ID:", i, "IP:", node.ip, "Porta:", node.port)
             elif option == 3:
                 node_id = int(input("Digite o ID do nó: "))
                 interface.join_node(node_id)
@@ -118,7 +127,6 @@ while True:
                 print("Opção inválida.")
 
     elif option == 2:
-        # Submenu Gerenciar Recursos
         while True:
             print("----- Submenu Gerenciar Recursos -----")
             print("1. Inserir Recurso")
@@ -149,7 +157,6 @@ while True:
                 print("Opção inválida.")
 
     elif option == 3:
-        # Sair
         break
     else:
         print("Opção inválida.")
